@@ -135,6 +135,11 @@ routes/
 
 ## Local DB Access (WSL / non-Kubernetes runtime)
 
+You have two options:
+
+1. Use your own local PostgreSQL databases (central + two shard databases).
+2. Use Kubernetes databases via port-forward (commands below).
+
 Run port-forward in separate terminals:
 
 ```bash
@@ -148,6 +153,10 @@ Then local app uses:
 - central: `127.0.0.1:15432`
 - shard-1: `127.0.0.1:25432`
 - shard-2: `127.0.0.1:35432`
+
+For Kubernetes database manifests and setup details, see:
+
+- https://github.com/Kozavochka/sharding-db
 
 ## Required Environment Variables
 
