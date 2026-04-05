@@ -7,6 +7,7 @@ namespace App\Actions;
 use App\Models\Tenant;
 use App\Services\TenantPlacementService;
 use App\Services\TenantSchemaManager;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Str;
 use Throwable;
 
@@ -44,6 +45,8 @@ class CreateTenantAction
             $this->schemaManager->createSchema($placement['connection'], $schema);
             $schemaCreated = true;
 
+            $this->runTenantMigrations($tenant);
+
             if ($domain !== null && trim($domain) !== '') {
                 $tenant->domains()->create([
                     'domain' => trim($domain),
@@ -67,6 +70,26 @@ class CreateTenantAction
             }
 
             throw $e;
+        }
+    }
+
+    protected function runTenantMigrations(Tenant $tenant): void
+    {
+        tenancy()->initialize($tenant);
+
+        try {
+            $exitCode = Artisan::call('migrate', [
+                '--database' => 'tenant',
+                '--path' => [database_path('migrations/tenant')],
+                '--realpath' => true,
+                '--force' => true,
+            ]);
+
+            if ($exitCode !== 0) {
+                throw new \RuntimeException('Tenant migration command failed.');
+            }
+        } finally {
+            tenancy()->end();
         }
     }
 }
