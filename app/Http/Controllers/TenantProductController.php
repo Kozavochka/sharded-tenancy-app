@@ -5,27 +5,60 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use App\Models\Product;
-use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
+use App\Http\Requests\StoreProductRequest;
+use App\Http\Requests\UpdateProductRequest;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\View\View;
 
 class TenantProductController extends Controller
 {
-    public function index(): JsonResponse
+    public function index(): View
     {
-        return response()->json(
-            Product::query()->orderByDesc('id')->get()
-        );
+        return view('tenant.products.index', [
+            'products' => Product::query()->orderByDesc('id')->get(),
+        ]);
     }
 
-    public function store(Request $request): JsonResponse
+    public function create(): View
     {
-        $data = $request->validate([
-            'name' => ['required', 'string', 'max:255'],
-            'price' => ['required', 'numeric', 'min:0'],
+        return view('tenant.products.index', [
+            'products' => Product::query()->orderByDesc('id')->get(),
         ]);
+    }
 
-        $product = Product::query()->create($data);
+    public function store(StoreProductRequest $request): RedirectResponse
+    {
+        $data = $request->validated();
 
-        return response()->json($product, 201);
+        Product::query()->create($data);
+
+        return redirect()
+            ->route('tenant.products.index')
+            ->with('status', 'Product created successfully.');
+    }
+
+    public function edit(Product $product): View
+    {
+        return view('tenant.products.edit', [
+            'product' => $product,
+        ]);
+    }
+
+    public function update(UpdateProductRequest $request, Product $product): RedirectResponse
+    {
+        $product->update($request->validated());
+
+        return redirect()
+            ->route('tenant.products.index')
+            ->with('status', 'Product updated successfully.');
+    }
+
+    public function destroy(Product $product): RedirectResponse
+    {
+        $product->delete();
+
+        return redirect()
+            ->route('tenant.products.index')
+            ->with('status', 'Product deleted successfully.');
     }
 }

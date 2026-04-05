@@ -29,6 +29,11 @@ Route::middleware([
         return 'This is your multi-tenant application. The id of the current tenant is ' . tenant('id');
     });
 
-    Route::get('/products', [TenantProductController::class, 'index']);
-    Route::post('/products', [TenantProductController::class, 'store']);
+    Route::get('/products', [TenantProductController::class, 'index'])->name('tenant.products.index');
+    Route::get('/products/create', [TenantProductController::class, 'create'])->name('tenant.products.create');
+    Route::post('/products', [TenantProductController::class, 'store'])->name('tenant.products.store');
+    Route::get('/products/{product}/edit', [TenantProductController::class, 'edit'])->name('tenant.products.edit');
+    Route::put('/products/{product}', [TenantProductController::class, 'update'])->name('tenant.products.update');
+    Route::patch('/products/{product}', [TenantProductController::class, 'update']);
+    Route::delete('/products/{product}', [TenantProductController::class, 'destroy'])->name('tenant.products.destroy');
 });
