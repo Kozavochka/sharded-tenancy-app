@@ -61,9 +61,18 @@ class TenantSchemaManager
     {
         $this->assertValidSchemaName($schema);
 
-        $quoted = $this->quoteIdentifier($schema);
+        DB::connection($connection)->statement(
+            "select set_config('search_path', ?, false)",
+            [$this->buildSearchPath($schema)]
+        );
+    }
 
-        DB::connection($connection)->statement("set search_path to {$quoted}, public");
+    public function currentSearchPath(string $connection): string
+    {
+        /** @var object{sp: string}|null $row */
+        $row = DB::connection($connection)->selectOne("select current_setting('search_path') as sp");
+
+        return (string) ($row->sp ?? '');
     }
 
     public function assertValidSchemaName(string $schema): void
@@ -92,8 +101,13 @@ class TenantSchemaManager
         }
     }
 
-    protected function quoteIdentifier(string $identifier): string
+    public function quoteIdentifier(string $identifier): string
     {
         return '"' . str_replace('"', '""', $identifier) . '"';
+    }
+
+    protected function buildSearchPath(string $schema): string
+    {
+        return $this->quoteIdentifier($schema) . ', public';
     }
 }

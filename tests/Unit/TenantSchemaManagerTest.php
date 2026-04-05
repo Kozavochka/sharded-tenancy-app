@@ -55,4 +55,18 @@ class TenantSchemaManagerTest extends TestCase
 
         app(TenantSchemaManager::class)->assertValidSchemaName('tenant_Ab12cd34');
     }
+
+    public function test_rejects_reserved_schema_name(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+
+        app(TenantSchemaManager::class)->assertValidSchemaName('public');
+    }
+
+    public function test_quotes_postgres_identifier_safely(): void
+    {
+        $quoted = app(TenantSchemaManager::class)->quoteIdentifier('tenant_a"b');
+
+        $this->assertSame('"tenant_a""b"', $quoted);
+    }
 }
