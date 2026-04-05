@@ -60,6 +60,9 @@ class TenantSchemaManager
     public function setSearchPath(string $connection, string $schema): void
     {
         $this->assertValidSchemaName($schema);
+        // if (! $this->schemaExists($connection, $schema)) {
+        //     throw new InvalidArgumentException("Schema [{$schema}] does not exist on connection [{$connection}].");
+        // }
 
         DB::connection($connection)->statement(
             "select set_config('search_path', ?, false)",
