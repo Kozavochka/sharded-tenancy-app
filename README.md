@@ -61,9 +61,10 @@ Instead of `DatabaseTenancyBootstrapper`, project uses:
 On tenancy initialization:
 
 1. Read `tenancy_db_connection` and `tenant_schema` from current tenant.
-2. Build runtime `tenant` connection from selected shard connection.
-3. `DB::purge('tenant')`, set default to `tenant`, reconnect.
-4. Execute `SET search_path TO <tenant_schema>, public`.
+2. Compare target shard with current runtime shard source.
+3. If shard changed: rebuild runtime `tenant` connection, `DB::purge('tenant')`, reconnect.
+4. If shard is the same: reuse existing runtime `tenant` connection (skip rebuild/reconnect).
+5. Set default to `tenant` and execute `SET search_path TO <tenant_schema>, public`.
 
 On tenancy end:
 

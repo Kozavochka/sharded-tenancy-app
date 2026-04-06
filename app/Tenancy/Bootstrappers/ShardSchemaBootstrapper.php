@@ -15,6 +15,7 @@ use Stancl\Tenancy\Contracts\TenancyBootstrapper;
 class ShardSchemaBootstrapper implements TenancyBootstrapper
 {
     protected string $tenantConnectionName = 'tenant';
+    protected string $tenantShardSourceConfigKey = '__shard_source';
 
     protected ?string $previousDefaultConnection = null;
     protected mixed $previousTenantConnectionConfig = null;
@@ -43,16 +44,30 @@ class ShardSchemaBootstrapper implements TenancyBootstrapper
         }
 
         $this->schemaManager->assertValidSchemaName($tenantSchema);
-        $this->previousDefaultConnection = $this->database->getDefaultConnection();
-        $this->previousTenantConnectionConfig = $this->config->get("database.connections.{$this->tenantConnectionName}");
 
-        // Build runtime tenant connection from selected shard connection.
-        $this->config->set("database.connections.{$this->tenantConnectionName}", $baseConnectionConfig);
-        $this->database->purge($this->tenantConnectionName);
+        // Preserve original state once per tenancy lifecycle.
+        if ($this->previousDefaultConnection === null) {
+            $this->previousDefaultConnection = $this->database->getDefaultConnection();
+        }
+
+        if ($this->previousTenantConnectionConfig === null) {
+            $this->previousTenantConnectionConfig = $this->config->get("database.connections.{$this->tenantConnectionName}");
+        }
+
+        $currentShardSource = $this->currentShardSource();
+        $reuseTenantConnection = is_string($currentShardSource) && $currentShardSource === $shardConnection;
+
+        if (! $reuseTenantConnection) {
+            // Build runtime tenant connection from selected shard connection.
+            $runtimeConnectionConfig = $baseConnectionConfig;
+            $runtimeConnectionConfig[$this->tenantShardSourceConfigKey] = $shardConnection;
+            $this->config->set("database.connections.{$this->tenantConnectionName}", $runtimeConnectionConfig);
+            $this->database->purge($this->tenantConnectionName);
+            $this->database->reconnect($this->tenantConnectionName);
+        }
 
         $this->config->set('database.default', $this->tenantConnectionName);
         $this->database->setDefaultConnection($this->tenantConnectionName);
-        $this->database->reconnect($this->tenantConnectionName);
 
         $this->schemaManager->setSearchPath($this->tenantConnectionName, $tenantSchema);
 
@@ -60,6 +75,7 @@ class ShardSchemaBootstrapper implements TenancyBootstrapper
             'tenant_id' => $tenantId,
             'shard_connection' => $shardConnection,
             'tenant_schema' => $tenantSchema,
+            'tenant_connection_reused' => $reuseTenantConnection,
         ]);
 
         if ((bool) config('app.debug')) {
@@ -107,5 +123,18 @@ class ShardSchemaBootstrapper implements TenancyBootstrapper
 
         $this->previousTenantConnectionConfig = null;
         $this->previousDefaultConnection = null;
+    }
+
+    protected function currentShardSource(): ?string
+    {
+        $runtimeTenantConfig = $this->config->get("database.connections.{$this->tenantConnectionName}");
+
+        if (! is_array($runtimeTenantConfig)) {
+            return null;
+        }
+
+        $source = $runtimeTenantConfig[$this->tenantShardSourceConfigKey] ?? null;
+
+        return is_string($source) && $source !== '' ? $source : null;
     }
 }

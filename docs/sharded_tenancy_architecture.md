@@ -122,16 +122,20 @@ On `tenancy()->initialize($tenant)`:
 - shard connection exists in `database.connections`;
 - schema name passes `assertValidSchemaName()`.
 
-3. Builds runtime `tenant` connection from the selected shard connection.
+3. Checks runtime tenant shard source (`database.connections.tenant.__shard_source`).
 
-4. Executes:
-- `DB::purge('tenant')`
-- `set database.default = tenant`
-- `DB::reconnect('tenant')`
+4. If shard source changed:
+- rebuilds runtime `tenant` connection from selected shard connection;
+- `DB::purge('tenant')`;
+- `DB::reconnect('tenant')`.
 
-5. Calls `setSearchPath('tenant', tenant_schema)`.
+5. If shard source is the same:
+- reuses existing runtime `tenant` connection;
+- skips redundant rebuild/reconnect.
 
-6. Writes bootstrap diagnostics log (tenant id / shard connection / schema).
+6. Sets `database.default = tenant` and calls `setSearchPath('tenant', tenant_schema)`.
+
+7. Writes bootstrap diagnostics log (tenant id / shard connection / schema / `tenant_connection_reused`).
 
 ### 3.2 Revert (return to central context)
 
@@ -224,6 +228,7 @@ Examples in this project:
 - `tenant_id`
 - `shard_connection`
 - `tenant_schema`
+- `tenant_connection_reused`
 
 - revert `info` log:
 - `central_connection`

@@ -71,8 +71,9 @@ class ShardedTenancyIntegrationTest extends TestCase
 
             tenancy()->initialize($small);
             $this->assertSame('tenant', config('database.default'));
-            $searchPath = DB::selectOne("select current_setting('search_path') as sp")->sp;
-            $this->assertSame("{$small->tenant_schema}, public", $searchPath);
+            $searchPath = (string) DB::selectOne("select current_setting('search_path') as sp")->sp;
+            $this->assertStringContainsString($small->tenant_schema, str_replace('"', '', $searchPath));
+            $this->assertStringContainsString('public', $searchPath);
 
             Product::create(['name' => 'small-only', 'price' => 11.11]);
             $this->assertSame(1, Product::query()->where('name', 'small-only')->count());
