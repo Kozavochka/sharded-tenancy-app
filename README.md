@@ -7,6 +7,7 @@ It uses:
 - one **central database** for tenant metadata (`tenants`, `domains`);
 - two **tenant shard connections** (`tenant_shard_1`, `tenant_shard_2`);
 - **schema-per-tenant** inside each shard database;
+- Redis-backed domain resolver cache (`tenant_domain:{host}`);
 - custom tenant bootstrap (`ShardSchemaBootstrapper`) that sets shard connection + `search_path`.
 
 No database-per-tenant is used.
@@ -38,10 +39,17 @@ Central database stores:
 
 This project explicitly uses **domain-based** identification:
 
-- `Stancl\Tenancy\Middleware\InitializeTenancyByDomain`
+- `App\Http\Middleware\InitializeTenancyByCachedDomain`
 - `Stancl\Tenancy\Middleware\PreventAccessFromCentralDomains`
 
 Defined in `routes/tenant.php`.
+
+Domain resolution flow:
+
+1. normalize host using `App\Services\TenantHostNormalizer`;
+2. resolve tenant through `App\Services\CachedTenantResolver` cache;
+3. on cache miss: query central DB by domain and warm cache;
+4. initialize tenancy (`tenancy()->initialize($tenant)`), then bootstrap shard/schema.
 
 ### Custom Tenancy Bootstrap
 
@@ -101,6 +109,8 @@ app/
   Providers/
     TenancyServiceProvider.php
   Services/
+    CachedTenantResolver.php
+    TenantHostNormalizer.php
     TenantPlacementService.php
     TenantSchemaManager.php
   Tenancy/
@@ -187,6 +197,15 @@ TENANT_SHARD_2_DB_PORT=35432
 TENANT_SHARD_2_DB_DATABASE=postgres
 TENANT_SHARD_2_DB_USERNAME=shard_b_admin
 TENANT_SHARD_2_DB_PASSWORD=CHANGE_ME_SHARD_B_ADMIN_PASSWORD
+
+CACHE_STORE=redis
+REDIS_HOST=127.0.0.1
+REDIS_PORT=6379
+REDIS_PASSWORD=CHANGE_ME_REDIS_PASSWORD
+
+TENANCY_DOMAIN_CACHE_STORE=redis
+TENANCY_DOMAIN_CACHE_TTL_SECONDS=900
+TENANCY_DOMAIN_CACHE_PREFIX=tenant_domain
 ```
 
 ## Setup
@@ -267,6 +286,11 @@ Routes are in `routes/tenant.php`, controller:
 
 - `App\Http\Controllers\TenantProductController`
 
+Resolver cache invalidation is wired to tenancy model events via:
+
+- `App\Listeners\InvalidateCachedTenantResolver`
+- events: `TenantSaved`, `TenantDeleted`, `DomainSaved`, `DomainDeleted`
+
 ## Why Data Is Isolated
 
 Isolation is provided by:
@@ -318,6 +342,15 @@ Install extension, for example on Ubuntu/WSL:
 ```bash
 sudo apt install -y php8.4-pgsql
 php -m | rg -i "pgsql|pdo_pgsql"
+```
+
+### `PHP extension pdo_sqlite is required` (tests)
+
+Install extension, for example on Ubuntu/WSL:
+
+```bash
+sudo apt install -y php8.4-sqlite3
+php -m | rg -i "sqlite|pdo_sqlite"
 ```
 
 ### `password authentication failed`

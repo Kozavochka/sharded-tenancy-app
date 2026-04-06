@@ -66,6 +66,26 @@ select set_config('search_path', ?, false)
 
 with a value like `"tenant_xxx", public`.
 
+### 2.5 Domain resolver cache
+
+Services:
+
+- `app/Services/TenantHostNormalizer.php`
+- `app/Services/CachedTenantResolver.php`
+
+Responsibilities:
+
+- normalize request host before tenant lookup;
+- resolve tenant by domain using cache key `tenant_domain:{normalized_host}`;
+- on cache miss, load tenant from central DB and warm cache;
+- invalidate cached keys when tenant/domain metadata changes.
+
+Configuration is in `config/tenancy.php`:
+
+- `domain_resolver.cache_store`
+- `domain_resolver.cache_ttl_seconds`
+- `domain_resolver.cache_prefix`
+
 ## 3. Tenancy Bootstrap: Context Switch Lifecycle
 
 Custom bootstrapper:
@@ -113,13 +133,14 @@ Tenant routes: `routes/tenant.php`
 
 Middleware chain:
 
-1. `InitializeTenancyByDomain`
+1. `InitializeTenancyByCachedDomain`
 2. `PreventAccessFromCentralDomains`
 
 Tenancy event provider: `app/Providers/TenancyServiceProvider.php`
 
 - `TenancyInitialized` -> `BootstrapTenancy`
 - `TenancyEnded` -> `RevertToCentralContext`
+- `TenantSaved|TenantDeleted|DomainSaved|DomainDeleted` -> `InvalidateCachedTenantResolver`
 
 Result: for a single HTTP request, tenant context and `search_path` are set once on initialize, then reset on end.
 
@@ -196,9 +217,14 @@ Examples in this project:
 
 This provides context-switch diagnostics without noisy per-query logging.
 
+`CachedTenantResolver` also writes debug logs for cache hit/miss and cache warmup.
+
 ## 9. Tenant Logic Map (Code)
 
 - Bootstrap/revert: `app/Tenancy/Bootstrappers/ShardSchemaBootstrapper.php`
+- HTTP tenant init middleware: `app/Http/Middleware/InitializeTenancyByCachedDomain.php`
+- Resolver + host normalization: `app/Services/CachedTenantResolver.php`, `app/Services/TenantHostNormalizer.php`
+- Resolver cache invalidation: `app/Listeners/InvalidateCachedTenantResolver.php`
 - Schema lifecycle: `app/Services/TenantSchemaManager.php`
 - Tenant creation flow: `app/Actions/CreateTenantAction.php`
 - Per-shard tenant migrations: `app/Console/Commands/TenantsMigrateShard.php`
