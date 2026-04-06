@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Models\Product;
+use App\Http\Middleware\InitializeTenancyByCachedDomain;
 use Illuminate\Support\Facades\Schema;
-use Stancl\Tenancy\Middleware\InitializeTenancyByDomain;
 use Stancl\Tenancy\Middleware\PreventAccessFromCentralDomains;
 use Tests\TestCase;
 
@@ -21,7 +21,7 @@ class TenantProductBladeTest extends TestCase
         }
 
         $this->withoutMiddleware([
-            InitializeTenancyByDomain::class,
+            InitializeTenancyByCachedDomain::class,
             PreventAccessFromCentralDomains::class,
         ]);
 
