@@ -8,6 +8,7 @@ It uses:
 - two **tenant shard connections** (`tenant_shard_1`, `tenant_shard_2`);
 - **schema-per-tenant** inside each shard database;
 - Redis-backed domain resolver cache (`tenant_domain:{host}`);
+- PostgreSQL advisory locks for provisioning and shard migrations;
 - custom tenant bootstrap (`ShardSchemaBootstrapper`) that sets shard connection + `search_path`.
 
 No database-per-tenant is used.
@@ -255,6 +256,11 @@ This command:
 5. creates domain record (if provided);
 6. rolls back tenant/schema on failure.
 
+Provisioning is protected by advisory locks:
+
+- `tenant:provision:domain:{normalized_domain}` (or `tenant:provision:name:{name}` when domain is missing);
+- `tenant:schema:{connection}:{schema}` for schema creation section.
+
 ## Tenant Migrations
 
 Tenant migrations are stored only in:
@@ -274,6 +280,10 @@ php artisan tenants:migrate-shard shard_2 --force
 - initializes tenancy per tenant;
 - runs `migrate --database=tenant --path=database/migrations/tenant`;
 - ends tenancy and moves to next tenant.
+
+Command execution is protected by shard-level advisory lock:
+
+- `tenant:migrate-shard:{shard}`
 
 ## Products Demo API (Tenant Routes)
 
@@ -330,6 +340,7 @@ Important test coverage includes:
 - `TenantPlacementServiceTest` (placement rules);
 - `TenantSchemaManagerTest` (schema safety/lifecycle helpers);
 - `ShardedTenancyIntegrationTest` (end-to-end shard/schema/search_path/data isolation).
+- `TenantRedisQueueIsolationTest` (Redis queue job isolation between tenants).
 
 Note: integration test requires running PostgreSQL connections/port-forward and may skip if DB is not reachable.
 

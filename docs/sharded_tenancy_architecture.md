@@ -86,6 +86,23 @@ Configuration is in `config/tenancy.php`:
 - `domain_resolver.cache_ttl_seconds`
 - `domain_resolver.cache_prefix`
 
+### 2.6 Advisory lock service
+
+Service:
+
+- `app/Services/DatabaseAdvisoryLock.php`
+
+Responsibilities:
+
+- acquire PostgreSQL advisory lock by string key;
+- execute critical section callback;
+- release lock in `finally`.
+
+Used in:
+
+- `CreateTenantAction` (provisioning lock + schema lock);
+- `TenantsMigrateShard` (shard-level lock).
+
 ## 3. Tenancy Bootstrap: Context Switch Lifecycle
 
 Custom bootstrapper:
@@ -154,12 +171,12 @@ Result: for a single HTTP request, tenant context and `search_path` are set once
 
 Config: `config/queue.php`
 
-For the `database` queue driver:
+For queue storage, project currently uses Redis driver:
 
-- `connection` is resolved from `DB_QUEUE_CONNECTION`;
-- fallback is `DB_CONNECTION` (central).
+- `QUEUE_CONNECTION=redis`;
+- Redis connection is configured in `config/database.php`.
 
-This prevents queue storage from depending on temporary `database.default = tenant` state in workers.
+Tenant context for job execution is still managed by tenancy lifecycle + `QueueTenancyBootstrapper`.
 
 ### 5.3 Isolation between jobs
 
@@ -225,6 +242,7 @@ This provides context-switch diagnostics without noisy per-query logging.
 - HTTP tenant init middleware: `app/Http/Middleware/InitializeTenancyByCachedDomain.php`
 - Resolver + host normalization: `app/Services/CachedTenantResolver.php`, `app/Services/TenantHostNormalizer.php`
 - Resolver cache invalidation: `app/Listeners/InvalidateCachedTenantResolver.php`
+- Advisory lock service: `app/Services/DatabaseAdvisoryLock.php`
 - Schema lifecycle: `app/Services/TenantSchemaManager.php`
 - Tenant creation flow: `app/Actions/CreateTenantAction.php`
 - Per-shard tenant migrations: `app/Console/Commands/TenantsMigrateShard.php`
@@ -239,8 +257,20 @@ This provides context-switch diagnostics without noisy per-query logging.
 - `tenancy()->initialize(...)`
 - `try/finally`
 - `tenancy()->end()`
-4. Keep queue storage on central connection.
+4. Keep queue storage explicitly configured (`redis` connection), independent from temporary `database.default = tenant`.
 5. When adding shards, extend `config/shards.php` and matching `database.connections` only.
+
+## 11. Queue Isolation Validation
+
+Feature test:
+
+- `tests/Feature/TenantRedisQueueIsolationTest.php`
+
+What it validates:
+
+- jobs dispatched from different tenant contexts into Redis queue;
+- jobs processed by worker keep correct tenant context;
+- records created by job remain isolated in each tenant schema.
 
 ---
 

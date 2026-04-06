@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Console\Commands;
 
 use App\Models\Tenant;
+use App\Services\DatabaseAdvisoryLock;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Artisan;
 use Throwable;
@@ -16,6 +17,12 @@ class TenantsMigrateShard extends Command
         {--force : Force the operation to run when in production}';
 
     protected $description = 'Run tenant migrations only for tenants in a specific shard.';
+
+    public function __construct(
+        protected DatabaseAdvisoryLock $advisoryLock,
+    ) {
+        parent::__construct();
+    }
 
     public function handle(): int
     {
@@ -30,60 +37,64 @@ class TenantsMigrateShard extends Command
             return self::FAILURE;
         }
 
-        $tenants = Tenant::query()
-            ->where('shard', $shard)
-            ->orderBy('id')
-            ->get();
+        $lockKey = "tenant:migrate-shard:{$shard}";
 
-        if ($tenants->isEmpty()) {
-            $this->warn("No tenants found for shard [{$shard}].");
+        return (int) $this->advisoryLock->block($lockKey, function () use ($shard, $force): int {
+            $tenants = Tenant::query()
+                ->where('shard', $shard)
+                ->orderBy('id')
+                ->get();
 
-            return self::SUCCESS;
-        }
+            if ($tenants->isEmpty()) {
+                $this->warn("No tenants found for shard [{$shard}].");
 
-        $this->info("Found {$tenants->count()} tenant(s) in shard [{$shard}].");
+                return self::SUCCESS;
+            }
 
-        foreach ($tenants as $tenant) {
-            $this->newLine();
-            $this->line("Tenant {$tenant->id} ({$tenant->tenant_schema})");
+            $this->info("Found {$tenants->count()} tenant(s) in shard [{$shard}].");
 
-            try {
-                tenancy()->initialize($tenant);
+            foreach ($tenants as $tenant) {
+                $this->newLine();
+                $this->line("Tenant {$tenant->id} ({$tenant->tenant_schema})");
 
-                $exitCode = Artisan::call('migrate', [
-                    '--database' => 'tenant',
-                    '--path' => [database_path('migrations/tenant')],
-                    '--realpath' => true,
-                    '--force' => $force,
-                ]);
+                try {
+                    tenancy()->initialize($tenant);
 
-                $this->output->write(Artisan::output());
+                    $exitCode = Artisan::call('migrate', [
+                        '--database' => 'tenant',
+                        '--path' => [database_path('migrations/tenant')],
+                        '--realpath' => true,
+                        '--force' => $force,
+                    ]);
 
-                if ($exitCode !== 0) {
-                    $this->error("Migration failed for tenant {$tenant->id}.");
-                    tenancy()->end();
+                    $this->output->write(Artisan::output());
+
+                    if ($exitCode !== 0) {
+                        $this->error("Migration failed for tenant {$tenant->id}.");
+                        tenancy()->end();
+
+                        return self::FAILURE;
+                    }
+                } catch (Throwable $e) {
+                    $this->error("Migration failed for tenant {$tenant->id}: {$e->getMessage()}");
+
+                    try {
+                        tenancy()->end();
+                    } catch (Throwable) {
+                        // no-op
+                    }
 
                     return self::FAILURE;
                 }
-            } catch (Throwable $e) {
-                $this->error("Migration failed for tenant {$tenant->id}: {$e->getMessage()}");
 
-                try {
-                    tenancy()->end();
-                } catch (Throwable) {
-                    // no-op
-                }
-
-                return self::FAILURE;
+                tenancy()->end();
+                $this->info("Tenant {$tenant->id} migrated.");
             }
 
-            tenancy()->end();
-            $this->info("Tenant {$tenant->id} migrated.");
-        }
+            $this->newLine();
+            $this->info("Shard [{$shard}] migration finished successfully.");
 
-        $this->newLine();
-        $this->info("Shard [{$shard}] migration finished successfully.");
-
-        return self::SUCCESS;
+            return self::SUCCESS;
+        });
     }
 }
