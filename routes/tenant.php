@@ -3,8 +3,8 @@
 declare(strict_types=1);
 
 use App\Http\Controllers\TenantProductController;
+use App\Http\Middleware\InitializeTenancyByCachedDomain;
 use Illuminate\Support\Facades\Route;
-use Stancl\Tenancy\Middleware\InitializeTenancyByDomain;
 use Stancl\Tenancy\Middleware\PreventAccessFromCentralDomains;
 
 /*
@@ -22,7 +22,7 @@ use Stancl\Tenancy\Middleware\PreventAccessFromCentralDomains;
 Route::middleware([
     'web',
     // Tenant identification strategy for HTTP requests: domain resolver.
-    InitializeTenancyByDomain::class,
+    InitializeTenancyByCachedDomain::class,
     PreventAccessFromCentralDomains::class,
 ])->group(function () {
     Route::get('/', function () {

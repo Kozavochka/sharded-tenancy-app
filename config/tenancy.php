@@ -12,6 +12,12 @@ return [
 
     'domain_model' => Domain::class,
 
+    'domain_resolver' => [
+        'cache_store' => env('TENANCY_DOMAIN_CACHE_STORE', env('CACHE_STORE', 'redis')),
+        'cache_ttl_seconds' => (int) env('TENANCY_DOMAIN_CACHE_TTL_SECONDS', 900),
+        'cache_prefix' => env('TENANCY_DOMAIN_CACHE_PREFIX', 'tenant_domain'),
+    ],
+
     /**
      * The list of domains hosting your central app.
      *

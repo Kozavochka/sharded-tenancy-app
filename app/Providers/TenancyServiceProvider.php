@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Providers;
 
+use App\Http\Middleware\InitializeTenancyByCachedDomain;
+use App\Listeners\InvalidateCachedTenantResolver;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
@@ -23,21 +25,29 @@ class TenancyServiceProvider extends ServiceProvider
             Events\CreatingTenant::class => [],
             Events\TenantCreated::class => [],
             Events\SavingTenant::class => [],
-            Events\TenantSaved::class => [],
+            Events\TenantSaved::class => [
+                InvalidateCachedTenantResolver::class,
+            ],
             Events\UpdatingTenant::class => [],
             Events\TenantUpdated::class => [],
             Events\DeletingTenant::class => [],
-            Events\TenantDeleted::class => [],
+            Events\TenantDeleted::class => [
+                InvalidateCachedTenantResolver::class,
+            ],
 
             // Domain events
             Events\CreatingDomain::class => [],
             Events\DomainCreated::class => [],
             Events\SavingDomain::class => [],
-            Events\DomainSaved::class => [],
+            Events\DomainSaved::class => [
+                InvalidateCachedTenantResolver::class,
+            ],
             Events\UpdatingDomain::class => [],
             Events\DomainUpdated::class => [],
             Events\DeletingDomain::class => [],
-            Events\DomainDeleted::class => [],
+            Events\DomainDeleted::class => [
+                InvalidateCachedTenantResolver::class,
+            ],
 
             // Database events
             Events\DatabaseCreated::class => [],
@@ -110,7 +120,7 @@ class TenancyServiceProvider extends ServiceProvider
             // Even higher priority than the initialization middleware
             Middleware\PreventAccessFromCentralDomains::class,
 
-            Middleware\InitializeTenancyByDomain::class,
+            InitializeTenancyByCachedDomain::class,
         ];
 
         foreach (array_reverse($tenancyMiddleware) as $middleware) {
